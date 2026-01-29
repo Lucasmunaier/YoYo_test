@@ -2,43 +2,83 @@
 import { useCallback } from 'react';
 import { BEEP_SOUND } from '../constants';
 
-let audio: HTMLAudioElement | null = null;
-const getAudio = () => {
-    if (typeof window !== 'undefined' && !audio) {
-        audio = new Audio(BEEP_SOUND);
+// --- Web Audio API Setup ---
+
+let audioContext: AudioContext | null = null;
+let audioBuffer: AudioBuffer | null = null;
+let isInitializing = false;
+
+// Helper to decode the Base64 sound to an ArrayBuffer
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+    // Remove the data URI prefix if it exists
+    const base64Data = base64.split(',')[1] || base64;
+    const binaryString = window.atob(base64Data);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
     }
-    return audio;
+    return bytes.buffer;
 }
 
-// This function must be called from a user gesture handler to unlock audio.
-export const unlockBeep = () => {
-    const beep = getAudio();
-    if (beep && beep.paused) {
-        beep.volume = 0;
-        const promise = beep.play();
-        if (promise) {
-            promise.then(() => {
-                // On success, pause and reset.
-                beep.pause();
-                beep.currentTime = 0;
-                beep.volume = 1;
-            }).catch(e => {
-                // It failed, probably because the user hasn't interacted with the page yet.
-                // Or some other browser restriction.
-                console.warn("Audio could not be unlocked.", e);
-            });
+// Initializes the AudioContext and decodes the audio data.
+// This is done lazily on the first unlock attempt.
+async function initializeAudio() {
+    if (audioContext || isInitializing || typeof window === 'undefined') {
+        return;
+    }
+    isInitializing = true;
+    try {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const arrayBuffer = base64ToArrayBuffer(BEEP_SOUND);
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        console.log("Audio resources initialized successfully.");
+    } catch (e) {
+        console.error("Failed to initialize Web Audio resources:", e);
+        // Reset context on failure so we can try again
+        audioContext = null; 
+    } finally {
+        isInitializing = false;
+    }
+}
+
+/**
+ * Unlocks the Web Audio API.
+ * This function MUST be called from within a user-initiated event handler
+ * (e.g., a 'click' or 'touchend' event).
+ */
+export const unlockAudio = () => {
+    const startAudio = async () => {
+        if (!audioContext) {
+            await initializeAudio();
         }
-    }
-}
 
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                console.log("AudioContext resumed successfully.");
+            }).catch(e => console.error("Failed to resume AudioContext:", e));
+        }
+    };
+    
+    startAudio();
+};
+
+/**
+ * Custom hook that returns a function to play the loaded beep sound.
+ */
 export const useBeep = (): (() => void) => {
-  const playBeep = useCallback(() => {
-    const beep = getAudio();
-    if (beep) {
-      beep.currentTime = 0;
-      beep.play().catch(error => console.error("Error playing beep sound:", error));
-    }
-  }, []);
-
-  return playBeep;
+    return useCallback(() => {
+        if (audioContext && audioBuffer && audioContext.state === 'running') {
+            try {
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+            } catch (e) {
+                console.error("Error playing beep sound:", e);
+            }
+        } else {
+            console.warn(`Cannot play beep. AudioContext state: ${audioContext?.state}`);
+        }
+    }, []);
 };

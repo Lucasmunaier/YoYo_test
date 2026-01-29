@@ -1,7 +1,7 @@
 
 import React, { useState, KeyboardEvent } from 'react';
 import { HistoryIcon, XIcon, UserPlusIcon } from './icons';
-import { unlockBeep } from '../hooks/useBeep';
+import { unlockAudio } from '../hooks/useBeep';
 
 interface SetupScreenProps {
   onStart: (names: string[]) => void;
@@ -34,7 +34,7 @@ const SetupScreen: React.FC<SetupScreenProps> = ({ onStart, onViewHistory, hasHi
 
   const handleStart = () => {
     if (names.length > 0) {
-      unlockBeep();
+      unlockAudio();
       onStart(names);
     }
   };
