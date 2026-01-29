@@ -1,0 +1,5 @@
+{
+  "name": "Yo-Yo Intermittent Recovery Test",
+  "description": "A web application to conduct the Yo-Yo Intermittent Recovery Test (Level 1), track athlete performance, calculate VO2 Max, and store results locally.",
+  "requestFramePermissions": []
+}
