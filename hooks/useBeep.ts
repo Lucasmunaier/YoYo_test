@@ -1,12 +1,7 @@
 import { useCallback } from 'react';
 
-// Mantemos o contexto fora do hook para ser partilhado
 let audioContext: AudioContext | null = null;
 
-/**
- * Ativa o sistema de áudio.
- * Deve ser chamado num evento de clique (como o botão "Iniciar").
- */
 export const unlockAudio = () => {
     if (!audioContext) {
         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -16,9 +11,20 @@ export const unlockAudio = () => {
     }
 };
 
-/**
- * Hook que gera um som de "bip" sintético.
- */
+// Nova função para síntese de voz
+export const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+        // Cancela qualquer fala anterior para não encavalar
+        window.speechSynthesis.cancel(); 
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.8; // Voz bem mais rápida (era 1.2)
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+    }
+};
+
 export const useBeep = () => {
     return useCallback(() => {
         if (!audioContext || audioContext.state !== 'running') return;
@@ -27,7 +33,7 @@ export const useBeep = () => {
         const gainNode = audioContext.createGain();
 
         oscillator.type = 'sine'; 
-        oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // Tom do bip
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime); 
         
         gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.5);

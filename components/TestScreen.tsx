@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { YOYO_IR1_LEVELS, REST_PERIOD_SECONDS } from '../constants';
 import { ShieldAlertIcon } from './icons';
-import { useBeep } from '../hooks/useBeep';
+import { useBeep, speak } from '../hooks/useBeep';
 import { TestResult } from '../types';
 
 interface AthleteState {
@@ -22,7 +21,8 @@ type TestStatus = 'initial' | 'running' | 'resting';
 const TestScreen: React.FC<TestScreenProps> = ({ athleteNames, onFinish }) => {
   const [status, setStatus] = useState<TestStatus>('initial');
   const [stageIndex, setStageIndex] = useState(0);
-  const [countdown, setCountdown] = useState(5); // Increased for group setup
+  // Alterado para 3 para começar direto na contagem regressiva sonora
+  const [countdown, setCountdown] = useState(3); 
   const playBeep = useBeep();
   
   const [athletes, setAthletes] = useState<AthleteState[]>(() => 
@@ -42,7 +42,6 @@ const TestScreen: React.FC<TestScreenProps> = ({ athleteNames, onFinish }) => {
     return currentStage ? currentStage.shuttleTime * 2 : 0;
   }, [currentStage]);
 
-  // Effect to end test when no athletes are active
   useEffect(() => {
     if (status !== 'initial' && activeAthletes.length === 0) {
       const finalResults = athletes.map(a => a.result).filter((r): r is TestResult => r !== null);
@@ -52,31 +51,37 @@ const TestScreen: React.FC<TestScreenProps> = ({ athleteNames, onFinish }) => {
 
   const finishAllTest = useCallback(() => {
     const finalResults = athletes.map(a => {
-      if (a.result) return a.result; // Already finished
-      
+      if (a.result) return a.result;
       const prevStage = stageIndex > 0 ? YOYO_IR1_LEVELS[stageIndex - 1] : null;
       const distance = prevStage ? prevStage.cumulativeDistance : 0;
       const level = prevStage ? prevStage.level : "Início";
       const vo2max = distance * 0.0084 + 36.4;
       return { name: a.name, distance, level, vo2max, date: new Date().toISOString() };
     }).filter((r): r is TestResult => r !== null);
-
     onFinish(finalResults);
   }, [athletes, stageIndex, onFinish]);
 
-  // Initial countdown effect
+  // Efeito Corrigido: Sincronização da Voz e do Contador
   useEffect(() => {
-    if (status === 'initial' && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+    if (status !== 'initial') return;
+
+    if (countdown > 0) {
+      // Fala imediatamente ao entrar no efeito para evitar delay de processamento
+      speak(countdown.toString());
+      
+      const timer = setTimeout(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
       return () => clearTimeout(timer);
-    } else if (status === 'initial' && countdown === 0) {
+    } else if (countdown === 0) {
+      speak("Vai!");
       setStatus('running');
       setCountdown(shuttleTime);
       playBeep();
     }
   }, [status, countdown, shuttleTime, playBeep]);
 
-  // Main test timer effect
+  // Timer principal do teste (Corrida e Repouso)
   useEffect(() => {
     if (status !== 'running' && status !== 'resting') return;
 
@@ -87,7 +92,7 @@ const TestScreen: React.FC<TestScreenProps> = ({ athleteNames, onFinish }) => {
             setStatus('resting');
             playBeep();
             return REST_PERIOD_SECONDS;
-          } else { // resting
+          } else { 
             if (stageIndex + 1 >= YOYO_IR1_LEVELS.length) {
               finishAllTest();
               return 0;
@@ -117,7 +122,6 @@ const TestScreen: React.FC<TestScreenProps> = ({ athleteNames, onFinish }) => {
       const level = prevStage ? prevStage.level : "Início";
       const vo2max = distance * 0.0084 + 36.4;
       const result: TestResult = { name: athleteName, distance, level, vo2max, date: new Date().toISOString() };
-      
       setAthletes(prev => prev.map(a => a.name === athleteName ? { ...a, status: 'finished', result } : a));
     }
   };
